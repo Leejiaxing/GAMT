@@ -1,0 +1,4 @@
+Namespace(FrameType='Haar', Lev=2, alpha=0.1, attention=True, batch_size=128, dataset='PROTEINS', device='cuda:0', dropout=0.0, epochs=1000, exp_way='k_fold', hidden_dim=128, lr=0.001, mixup=True, n=2, num_classes=2, num_features=4, patience=150, repetitions=10, s=2, seed=777, weight_decay=0.001)
+seed : 777
+Total test set results, accuracy : [0.7747747747747747, 0.7321428571428571, 0.8108108108108109, 0.7657657657657657, 0.8125, 0.7297297297297297, 0.7567567567567568, 0.7387387387387387, 0.7321428571428571, 0.7567567567567568]
+Average test set results, mean accuracy = 0.761012, std = 0.029190
