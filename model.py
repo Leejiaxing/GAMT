@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, GATConv
 
-from layers import SAGPool, DecomLayer
+from layers import DecomLayer
 
 
 class Model(nn.Module):
@@ -31,7 +31,6 @@ class Model(nn.Module):
         x = F.relu(self.fc2(x))
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = F.log_softmax(self.fc3(x), dim=-1)
-
         return x
 
     def forward(self, data, mixup=False, alpha=0.1):
@@ -46,24 +45,24 @@ class Model(nn.Module):
             perm = torch.randperm(y.size(0), device='cuda:0')
             y_perm = y[perm]
 
-            # three convolutional layers
+            # 3 convolutional layers
             x = F.relu(self.conv1(x, edge_index))
             x = F.relu(self.conv2(x, edge_index))
             x = F.relu(self.conv3(x, edge_index))
 
-            # one Framelet decomposition layer
+            # 1 Framelet decomposition layer
             x = self.decomposition(x, batch, batch_size, d, d_index)
             x_mix = lam * x + (1 - lam) * x[perm, :]
             x = self.fc_forward(x_mix)
 
             return x, y_perm, lam
         else:
-            # three convolutional layers
+            # 3 convolutional layers
             x = F.relu(self.conv1(x, edge_index))
             x = F.relu(self.conv2(x, edge_index))
             x = F.relu(self.conv3(x, edge_index))
 
-            # one Framelet decomposition layer
+            # 1 Framelet decomposition layer
             x = self.decomposition(x, batch, batch_size, d, d_index)
 
             x = self.fc_forward(x)

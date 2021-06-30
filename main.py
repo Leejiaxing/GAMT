@@ -13,23 +13,23 @@ from utils import dataset_init
 from torch_geometric.datasets import TUDataset
 from load_data import Dataset
 
-parser = argparse.ArgumentParser()
-
+parser = argparse.ArgumentParser(description='Multi-scale Self-attention Mixup for Graph Classification')
 parser.add_argument('--seed', type=int, default=777, help='random seed')
 parser.add_argument('--exp_way', type=str, default='k_fold', help='random-split or cross-validation ')
 parser.add_argument('--repetitions', type=int, default=10, help='number of repetitions (default: 10)')
-parser.add_argument('--batch_size', type=int, default=32, help='batch size')
+parser.add_argument('--batch_size', type=int, default=128, help='batch size')
 parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
 parser.add_argument('--weight_decay', type=float, default=0.001, help='weight decay')
 parser.add_argument('--mixup', type=bool, default=True, help='whether use mixup')
 parser.add_argument('--attention', type=bool, default=True, help='whether use self-attention')
 parser.add_argument('--hidden_dim', type=int, default=128, help='hidden size')
 parser.add_argument('--dropout', type=float, default=0.0, help='dropout ratio')
-parser.add_argument('--dataset', type=str, default='ENZYMES', help='PROTEINS/DD/NCI1/NCI109/Mutagenicity/ENZYMES')
+parser.add_argument('--dataset', type=str, default='PROTEINS', help='PROTEINS/DD/NCI1/NCI109/Mutagenicity/ENZYMES')
 parser.add_argument('--device', type=str, default='cuda:0', help='specify cuda devices')
 parser.add_argument('--epochs', type=int, default=5000, help='maximum number of epochs')
-parser.add_argument('--patience', type=int, default=5000, help='patience for early stopping')
-parser.add_argument('--alpha', type=int, default=1.0, help='alpha for mixup')
+parser.add_argument('--patience', type=int, default=150, help='patience for early stopping')
+parser.add_argument('--num_heads', type=int, default=8, help='alpha for mixup')
+parser.add_argument('--alpha', type=int, default=0.1, help='alpha for mixup')
 parser.add_argument('--Lev', type=int, default=2, help='level of transform (default: 2)')
 parser.add_argument('--s', type=float, default=2, help='dilation scale > 1 (default: 2)')
 parser.add_argument('--n', type=int, default=2,
@@ -46,7 +46,7 @@ def setup_seed(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def train(model, optimizer, train_loader, val_loader, i_fold):
+def train(model, optimizer, train_loader, test_loader, val_loader, i_fold):
     """
 
     :param train_loader:
@@ -61,13 +61,12 @@ def train(model, optimizer, train_loader, val_loader, i_fold):
     for epoch in range(args.epochs):
         model.train()
         t = time.time()
-        loss_train = 0.0
+        train_loss = 0.0
         correct = 0
         for i, data in enumerate(train_loader):
             # zero the parameter gradients
             optimizer.zero_grad()
             data = data.to(args.device)
-            # forward + backward + optimize
             if args.mixup:
                 out, y_b, lam = model(data, mixup=True, alpha=args.alpha)
                 loss = lam * F.nll_loss(out, data.y) + (1 - lam) * F.nll_loss(out, y_b)
@@ -76,14 +75,16 @@ def train(model, optimizer, train_loader, val_loader, i_fold):
                 loss = F.nll_loss(out, data.y)
             loss.backward()
             optimizer.step()
-            loss_train += loss.item()
+            train_loss += loss.item()
             pred = out.max(dim=1)[1]
             correct += pred.eq(data.y).sum().item()
-        acc_train = correct / len(train_loader.dataset)
+        train_cc = correct / len(train_loader.dataset)
         val_acc, val_loss = test_model(model, val_loader)
-        print('Epoch: {:04d}'.format(epoch + 1), 'loss_train: {:.6f}'.format(loss_train),
-              'loss_val: {:.6f}'.format(val_loss),
-              'acc_val: {:.6f}'.format(val_acc), 'time: {:.6f}s'.format(time.time() - t))
+        test_acc, test_loss = test_model(model, test_loader)
+        print('Epoch: {:04d}'.format(epoch), 'train_loss: {:.6f}'.format(train_loss),
+              'val_loss: {:.6f}'.format(val_loss), 'val_acc: {:.6f}'.format(val_acc),
+              'test_loss: {:.6f}'.format(test_loss), 'test_acc: {:.6f}'.format(test_acc),
+              'time: {:.6f}s'.format(time.time() - t))
 
         if val_loss < min_loss:
             torch.save(model.state_dict(), 'ckpt/{}/{}_fold_best_model.pth'.format(args.dataset, i_fold))
@@ -104,15 +105,18 @@ def train(model, optimizer, train_loader, val_loader, i_fold):
 
 def test_model(model, loader):
     model.eval()
-    correct = 0.0
-    loss_test = 0.0
+    correct = 0.
+    test_loss = 0.
     for data in loader:
-        data = data.to(args.device)
-        out = model(data)
-        pred = out.max(dim=1)[1]
-        correct += pred.eq(data.y).sum().item()
-        loss_test += F.nll_loss(out, data.y).item()
-    return correct / len(loader.dataset), loss_test
+        with torch.no_grad():
+            data = data.to(args.device)
+            out = model(data)
+            pred = out.max(dim=1)[1]
+            correct += pred.eq(data.y).sum().item()
+            test_loss += F.nll_loss(out, data.y, reduction='sum').item()
+    acc = correct / len(loader.dataset)
+    loss = test_loss / len(loader.dataset)
+    return acc, loss
 
 
 if __name__ == '__main__':
@@ -144,9 +148,9 @@ if __name__ == '__main__':
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
         # Model training
-        best_model = train(model, optimizer, train_loader, val_loader, i)
+        best_model = train(model, optimizer, train_loader, test_loader, val_loader, i)
 
-        # Restore  model for testing
+        # Restore model for testing
         model.load_state_dict(torch.load('ckpt/{}/{}_fold_best_model.pth'.format(args.dataset, i)))
         test_acc, test_loss = test_model(model, test_loader)
         acc.append(test_acc)
