@@ -10,38 +10,38 @@ class DecomLayer(nn.Module):
     def __init__(self, args):
         super(DecomLayer, self).__init__()
         self.attention = args.attention
-        self.dim_in = args.hidden_dim
+        self.dim_in = args.hidden_dim * 2
         self.dim_out = args.hidden_dim
         self.num_heads = args.num_heads
-        self.norm_fact = 1 / sqrt(self.dim_out // self.num_heads)
-        # self.norm_fact = 1 / sqrt(self.dim_out)
+        # self.norm_fact = 1 / sqrt(self.dim_out // self.num_heads)
+        self.norm_fact = 1 / sqrt(self.dim_out)
         self.linear_q = nn.Linear(self.dim_in, self.dim_out, bias=False)
         self.linear_k = nn.Linear(self.dim_in, self.dim_out, bias=False)
         self.linear_v = nn.Linear(self.dim_in, self.dim_out, bias=False)
 
     def calculate_att(self, x, batch, batch_size):
         # 多头注意力
-        num_heads = self.num_heads
-        dim_out = self.dim_out // num_heads  # dim_k of each head
-
-        Q = self.linear_q(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dk)
-        K = self.linear_k(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dk)
-        V = self.linear_v(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dv)
-
-        dist = torch.matmul(Q, K.transpose(1, 2)) * self.norm_fact  # batch, nh, n, n
-        dist = torch.softmax(dist, dim=-1)  # nh, n, n
-
-        att = torch.matmul(dist, V)  # nh, n, dv
-        att = att.transpose(0, 1).reshape(3, self.dim_out)  # n, dim_v
+        # num_heads = self.num_heads
+        # dim_out = self.dim_out // num_heads  # dim_k of each head
+        #
+        # Q = self.linear_q(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dk)
+        # K = self.linear_k(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dk)
+        # V = self.linear_v(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dv)
+        #
+        # dist = torch.matmul(Q, K.transpose(1, 2)) * self.norm_fact  # batch, nh, n, n
+        # dist = torch.softmax(dist, dim=-1)  # nh, n, n
+        #
+        # att = torch.matmul(dist, V)  # nh, n, dv
+        # att = att.transpose(0, 1).reshape(3, self.dim_out)  # n, dim_v
 
         # 单头注意力
-        # Q = self.linear_q(x)
-        # K = self.linear_k(x)
-        # V = self.linear_v(x)
-        #
-        # dist = (Q @ K.T) * self.norm_fact
-        # dist = torch.softmax(dist, dim=-1)
-        # att = dist @ V
+        Q = self.linear_q(x)
+        K = self.linear_k(x)
+        V = self.linear_v(x)
+
+        dist = (Q @ K.T) * self.norm_fact
+        dist = torch.softmax(dist, dim=-1)
+        att = dist @ V
 
         return att
 
@@ -73,8 +73,8 @@ class DecomLayer(nn.Module):
             bi = (batch == i)
             index, value, m, n = scipy_to_torch_sparse(d_list[i][0])
             coefs = spmm(index, value, m, n, x[bi, :])
-            x_dec = f(coefs, d_index[i][0].to(device))
-            # x_dec = torch.cat([global_mean_pool(coefs, d_index[i][0].to(device)), global_max_pool(coefs, d_index[i][0].to(device)), global_add_pool(coefs, d_index[i][0].to(device))], dim=1)
+            # x_dec = f(coefs, d_index[i][0].to(device))
+            x_dec = torch.cat([global_mean_pool(coefs, d_index[i][0].to(device)), global_add_pool(coefs, d_index[i][0].to(device))], dim=1)
             if self.attention:
                 x_dec = self.calculate_att(x_dec, batch, batch_size)
 

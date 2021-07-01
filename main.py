@@ -1,5 +1,4 @@
 import argparse
-import glob
 import os
 import time
 
@@ -7,8 +6,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import random
+from contrast.SAGPool import SAGPool
 from model import Model
-from GCN import GCN
 from utils import dataset_init
 from torch_geometric.datasets import TUDataset
 from load_data import Dataset
@@ -17,14 +16,14 @@ parser = argparse.ArgumentParser(description='Multi-scale Self-attention Mixup f
 parser.add_argument('--seed', type=int, default=777, help='random seed')
 parser.add_argument('--exp_way', type=str, default='k_fold', help='random-split or cross-validation ')
 parser.add_argument('--repetitions', type=int, default=10, help='number of repetitions (default: 10)')
-parser.add_argument('--batch_size', type=int, default=128, help='batch size')
+parser.add_argument('--batch_size', type=int, default=256, help='batch size')
 parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
 parser.add_argument('--weight_decay', type=float, default=0.001, help='weight decay')
-parser.add_argument('--mixup', type=bool, default=True, help='whether use mixup')
+parser.add_argument('--mixup', type=bool, default=False, help='whether use mixup')
 parser.add_argument('--attention', type=bool, default=True, help='whether use self-attention')
 parser.add_argument('--hidden_dim', type=int, default=128, help='hidden size')
 parser.add_argument('--dropout', type=float, default=0.0, help='dropout ratio')
-parser.add_argument('--dataset', type=str, default='PROTEINS', help='PROTEINS/DD/NCI1/NCI109/Mutagenicity/ENZYMES')
+parser.add_argument('--dataset', type=str, default='Mutagenicity', help='PROTEINS/DD/NCI1/NCI109/Mutagenicity/ENZYMES')
 parser.add_argument('--device', type=str, default='cuda:0', help='specify cuda devices')
 parser.add_argument('--epochs', type=int, default=5000, help='maximum number of epochs')
 parser.add_argument('--patience', type=int, default=150, help='patience for early stopping')
@@ -128,7 +127,7 @@ if __name__ == '__main__':
     dataset = TUDataset(os.path.join('data', args.dataset), name=args.dataset, use_node_attr=True)
     args.num_classes = dataset.num_classes
     args.num_features = dataset.num_features
-    dataset, r = dataset_init(dataset, args.Lev, args.s, args.n, waveletType=args.FrameType)
+    # dataset, r = dataset_init(dataset, args.Lev, args.s, args.n, waveletType=args.FrameType)
     myDataset = Dataset(args, dataset)
 
     print(args)
@@ -143,8 +142,8 @@ if __name__ == '__main__':
             train_loader, val_loader, test_loader = myDataset.randomly_split()
 
         # Model initialization
-        model = Model(args, r).to(args.device)
-        # model = GCN(args).to(args.device)
+        # model = Model(args, r).to(args.device)
+        model = SAGPool(args).to(args.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
         # Model training
