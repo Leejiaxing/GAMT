@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 import random
 from contrast.SAGPool import SAGPool
+from contrast.HGPSL import HGPSL
 from model import Model
 from utils import dataset_init
 from torch_geometric.datasets import TUDataset
@@ -16,17 +17,17 @@ parser = argparse.ArgumentParser(description='Multi-scale Self-attention Mixup f
 parser.add_argument('--seed', type=int, default=777, help='random seed')
 parser.add_argument('--exp_way', type=str, default='k_fold', help='random-split or cross-validation ')
 parser.add_argument('--repetitions', type=int, default=10, help='number of repetitions (default: 10)')
-parser.add_argument('--batch_size', type=int, default=256, help='batch size')
+parser.add_argument('--batch_size', type=int, default=512, help='batch size')
 parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
 parser.add_argument('--weight_decay', type=float, default=0.001, help='weight decay')
 parser.add_argument('--mixup', type=bool, default=False, help='whether use mixup')
 parser.add_argument('--attention', type=bool, default=True, help='whether use self-attention')
 parser.add_argument('--hidden_dim', type=int, default=128, help='hidden size')
 parser.add_argument('--dropout', type=float, default=0.0, help='dropout ratio')
-parser.add_argument('--dataset', type=str, default='Mutagenicity', help='PROTEINS/DD/NCI1/NCI109/Mutagenicity/ENZYMES')
+parser.add_argument('--dataset', type=str, default='PROTEINS', help='PROTEINS/DD/NCI1/NCI109/Mutagenicity/ENZYMES')
 parser.add_argument('--device', type=str, default='cuda:0', help='specify cuda devices')
 parser.add_argument('--epochs', type=int, default=5000, help='maximum number of epochs')
-parser.add_argument('--patience', type=int, default=150, help='patience for early stopping')
+parser.add_argument('--patience', type=int, default=100, help='patience for early stopping')
 parser.add_argument('--num_heads', type=int, default=8, help='alpha for mixup')
 parser.add_argument('--alpha', type=int, default=0.1, help='alpha for mixup')
 parser.add_argument('--Lev', type=int, default=2, help='level of transform (default: 2)')
@@ -34,6 +35,13 @@ parser.add_argument('--s', type=float, default=2, help='dilation scale > 1 (defa
 parser.add_argument('--n', type=int, default=2,
                     help='n - 1 = Degree of Chebyshev Polynomial Approximation (default: n = 2)')
 parser.add_argument('--FrameType', type=str, default='Haar', help='frame type (default: Haar)')
+# HGPSL
+parser.add_argument('--sample_neighbor', type=bool, default=True, help='whether sample neighbors')
+parser.add_argument('--sparse_attention', type=bool, default=True, help='whether use sparse attention')
+parser.add_argument('--structure_learning', type=bool, default=True, help='whether perform structure learning')
+parser.add_argument('--pooling_ratio', type=float, default=0.5, help='pooling ratio')
+parser.add_argument('--dropout_ratio', type=float, default=0.0, help='dropout ratio')
+parser.add_argument('--lamb', type=float, default=1.0, help='trade-off parameter')
 args = parser.parse_args()
 
 
@@ -80,6 +88,7 @@ def train(model, optimizer, train_loader, test_loader, val_loader, i_fold):
         train_cc = correct / len(train_loader.dataset)
         val_acc, val_loss = test_model(model, val_loader)
         test_acc, test_loss = test_model(model, test_loader)
+
         print('Epoch: {:04d}'.format(epoch), 'train_loss: {:.6f}'.format(train_loss),
               'val_loss: {:.6f}'.format(val_loss), 'val_acc: {:.6f}'.format(val_acc),
               'test_loss: {:.6f}'.format(test_loss), 'test_acc: {:.6f}'.format(test_acc),
@@ -136,14 +145,11 @@ if __name__ == '__main__':
         if args.exp_way == 'k_fold':
             train_loader, val_loader, test_loader = myDataset.kfold_split(i)
         elif args.exp_way == 'random_split':
-            args.seed = i * 111
-            setup_seed(args.seed)
-            seed.append(args.seed)
             train_loader, val_loader, test_loader = myDataset.randomly_split()
 
         # Model initialization
         # model = Model(args, r).to(args.device)
-        model = SAGPool(args).to(args.device)
+        model = HGPSL(args).to(args.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
         # Model training
