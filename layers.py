@@ -9,8 +9,9 @@ from math import sqrt
 class DecomLayer(nn.Module):
     def __init__(self, args):
         super(DecomLayer, self).__init__()
+        self.device = args.device
         self.attention = args.attention
-        self.dim_in = args.hidden_dim * 2
+        self.dim_in = args.hidden_dim
         self.dim_out = args.hidden_dim
         self.num_heads = args.num_heads
         # self.norm_fact = 1 / sqrt(self.dim_out // self.num_heads)
@@ -45,7 +46,7 @@ class DecomLayer(nn.Module):
 
         return att
 
-    def forward(self, x, batch, batch_size, d_list, d_index, aggre_mode='sum'):
+    def forward(self, x, batch, batch_size, d_list, d_index):
         """
            Using Undecimated Framelet Transform.
 
@@ -57,29 +58,19 @@ class DecomLayer(nn.Module):
            :param aggre_mode: aggregation mode. choices: sum, max, and avg. (default: sum)
            :return: batched vectorial representation for the graphs in the batch.
            """
-        if aggre_mode == 'sum':
-            f = global_add_pool
-        elif aggre_mode == 'avg':
-            f = global_mean_pool
-        elif aggre_mode == 'max':
-            f = global_max_pool
-        else:
-            raise Exception('aggregation mode is invalid')
-
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
         for i in range(batch_size):
             # extract the i-th graph
             bi = (batch == i)
             index, value, m, n = scipy_to_torch_sparse(d_list[i][0])
             coefs = spmm(index, value, m, n, x[bi, :])
-            # x_dec = f(coefs, d_index[i][0].to(device))
-            x_dec = torch.cat([global_mean_pool(coefs, d_index[i][0].to(device)), global_add_pool(coefs, d_index[i][0].to(device))], dim=1)
+            # coefs = torch.sparse.mm(scipy_to_torch_sparse(d_list[i][0]).to(device), x[bi, :])
+            x_dec = global_add_pool(coefs, d_index[i][0].to(self.device))
+            # x_dec = torch.cat([global_mean_pool(coefs, d_index[i][0].to(self.device)), global_add_pool(coefs,
+            # d_index[i][0].to(self.device))], dim=1)
             if self.attention:
                 x_dec = self.calculate_att(x_dec, batch, batch_size)
 
             if i == 0:
-                # x_pool = f(coefs, d_index[i][0].to(device)).flatten()
                 x_pool = x_dec.flatten()
             else:
                 x_pool = torch.vstack((x_pool, x_dec.flatten()))

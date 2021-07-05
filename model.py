@@ -10,6 +10,7 @@ from layers import DecomLayer
 class Model(nn.Module):
     def __init__(self, args, r):
         super(Model, self).__init__()
+        self.args = args
         self.dropout = args.dropout
         self.num_classes = args.num_classes
         self.num_features = args.num_features
@@ -42,7 +43,7 @@ class Model(nn.Module):
                 lam = np.random.beta(alpha, alpha)
             else:
                 lam = 1.0
-            perm = torch.randperm(y.size(0), device='cuda:0')
+            perm = torch.randperm(y.size(0), device=self.args.device)
             y_perm = y[perm]
 
             # 3 convolutional layers

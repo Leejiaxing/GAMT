@@ -3,7 +3,7 @@ from scipy import sparse
 from scipy.sparse.linalg import lobpcg
 import torch
 from torch_geometric.data import Data, DataLoader
-from torch_geometric.utils import get_laplacian
+from torch_geometric.utils import get_laplacian, degree
 
 
 # function for pre-processing
@@ -12,13 +12,19 @@ def scipy_to_torch_sparse(A, device='cuda:0'):
     A = sparse.coo_matrix(A)
     m = A.shape[0]
     n = A.shape[1]
-    row = torch.tensor(A.row, dtype=torch.long, device='cuda:0')
-    col = torch.tensor(A.col, dtype=torch.long, device='cuda:0')
+    row = torch.tensor(A.row, dtype=torch.long, device=device)
+    col = torch.tensor(A.col, dtype=torch.long, device=device)
     index = torch.stack((row, col), dim=0)
-    value = torch.Tensor(A.data).cuda()
+    value = torch.Tensor(A.data).to(device)
 
-    # return torch.sparse_coo_tensor(index, value, A.shape).to(device)
     return index, value, m, n
+    # A = sparse.coo_matrix(A)
+    # row = torch.tensor(A.row, device=device)
+    # col = torch.tensor(A.col, device=device)
+    # index = torch.stack((row, col), dim=0)
+    # value = torch.Tensor(A.data).to(device)
+    #
+    # return torch.sparse_coo_tensor(index, value, A.shape).to(device)
 
 
 # function for pre-processing
@@ -60,40 +66,42 @@ def get_operator(L, DFilters, n, s, J, Lev):
     return d
 
 
-# initialize dataset
-def dataset_init(dataset, Lev, s, n, waveletType='Haar'):
-    if waveletType == 'Haar':
-        D1 = lambda x: np.cos(x / 2)
-        D2 = lambda x: np.sin(x / 2)
-        DFilters = [D1, D2]
-    elif waveletType == 'Linear':
-        D1 = lambda x: np.square(np.cos(x / 2))
-        D2 = lambda x: np.sin(x) / np.sqrt(2)
-        D3 = lambda x: np.square(np.sin(x / 2))
-        DFilters = [D1, D2, D3]
-    elif waveletType == 'Quadratic':  # not accurate so far
-        D1 = lambda x: np.cos(x / 2) ** 3
-        D2 = lambda x: np.multiply((np.sqrt(3) * np.sin(x / 2)), np.cos(x / 2) ** 2)
-        D3 = lambda x: np.multiply((np.sqrt(3) * np.sin(x / 2) ** 2), np.cos(x / 2))
-        D4 = lambda x: np.sin(x / 2) ** 3
-        DFilters = [D1, D2, D3, D4]
-    else:
-        raise Exception('Invalid FrameType')
-    r = len(DFilters)
-
-    dataset1 = list()
+# Compute feature
+def com_feature(dataset):
+    dataset_temp = list()
     for i in range(len(dataset)):
-        data1 = Data(x=dataset[i].x, edge_index=dataset[i].edge_index, y=dataset[i].y)
+        x = degree(dataset[i].edge_index[0], dataset[i].num_nodes).view(-1, 1)
+        data_i = Data(x=x, edge_index=dataset[i].edge_index, y=dataset[i].y)
+        dataset_temp.append(data_i)
+
+    return dataset_temp
+
+
+# initialize dataset
+def dataset_init(dataset, args):
+    D1 = lambda x: np.cos(x / 2)
+    D2 = lambda x: np.sin(x / 2)
+    DFilters = [D1, D2]
+    r = len(DFilters)
+    Lev = args.Lev
+    s = args.s
+    n = args.n
+    dataset_temp = list()
+
+    for i in range(len(dataset)):
+        data_temp = Data(x=dataset[i].x, edge_index=dataset[i].edge_index, y=dataset[i].y)
 
         # get graph Laplacian
-        num_nodes = data1.x.shape[0]
+        num_nodes = data_temp.x.shape[0]
         L = get_laplacian(dataset[i].edge_index, num_nodes=num_nodes, normalization='sym')
         L = sparse.coo_matrix((L[1].numpy(), (L[0][0, :].numpy(), L[0][1, :].numpy())), shape=(num_nodes, num_nodes))
+
         # calculate lambda max
         lobpcg_init = np.random.rand(num_nodes, 1)
         lambda_max, _ = lobpcg(L, lobpcg_init)
         lambda_max = lambda_max[0]
         J = np.log(lambda_max / np.pi) / np.log(s) + Lev - 1  # dilation level to start the decomposition
+
         # get matrix operators
         d = get_operator(L, DFilters, n, s, J, Lev)
         for m in range(1, r):
@@ -103,11 +111,13 @@ def dataset_init(dataset, Lev, s, n, waveletType='Haar'):
                 else:
                     d_aggre = sparse.vstack((d_aggre, d[m, q]))
         d_aggre = sparse.vstack((d[0, Lev - 1], d_aggre))
-        data1.d = [d_aggre]
+        data_temp.d = [d_aggre]
+
         # get d_index
         a = [i for i in range((r - 1) * Lev + 1)]
-        data1.d_index = [torch.tensor([a[i // num_nodes] for i in range(len(a) * num_nodes)], device='cuda:0')]
-        # append data1 into dataset1
-        dataset1.append(data1)
+        data_temp.d_index = [torch.tensor([a[i // num_nodes] for i in range(len(a) * num_nodes)], device=args.device)]
 
-    return dataset1, r
+        # append data1 into dataset1
+        dataset_temp.append(data_temp)
+
+    return dataset_temp, r
