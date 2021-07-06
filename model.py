@@ -26,6 +26,14 @@ class Model(nn.Module):
         self.fc2 = nn.Linear(self.nhid, self.nhid // 2)
         self.fc3 = nn.Linear(self.nhid // 2, self.num_classes)
 
+    def reset_parameters(self):
+        self.conv1.reset_parameters()
+        self.conv2.reset_parameters()
+        self.conv3.reset_parameters()
+        self.fc1.reset_parameters()
+        self.fc2.reset_parameters()
+        self.fc3.reset_parameters()
+
     def fc_forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.dropout(x, p=self.dropout, training=self.training)

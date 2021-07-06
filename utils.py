@@ -4,7 +4,7 @@ from scipy.sparse.linalg import lobpcg
 import torch
 from torch_geometric.data import Data, DataLoader
 from torch_geometric.utils import get_laplacian, degree
-
+from sklearn.model_selection import StratifiedKFold
 
 # function for pre-processing
 @torch.no_grad()
@@ -121,3 +121,21 @@ def dataset_init(dataset, args):
         dataset_temp.append(data_temp)
 
     return dataset_temp, r
+
+
+def k_fold(dataset, folds):
+    skf = StratifiedKFold(folds, shuffle=True, random_state=12345)
+
+    test_indices, train_indices = [], []
+    for _, idx in skf.split(torch.zeros(len(dataset)), dataset.data.y):
+        test_indices.append(idx)
+
+    val_indices = [test_indices[i - 1] for i in range(folds)]
+    np.ones()
+    for i in range(folds):
+        train_mask = np.ones(len(dataset), dtype=bool)
+        train_mask[test_indices[i]] = 0
+        train_mask[val_indices[i]] = 0
+        train_indices.append(train_mask.nonzero().view(-1))
+
+    return train_indices, test_indices, val_indices

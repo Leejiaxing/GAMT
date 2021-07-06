@@ -4,45 +4,78 @@ from torch_geometric.nn import global_add_pool, global_max_pool, global_mean_poo
 from torch_sparse import spmm
 from utils import scipy_to_torch_sparse
 from math import sqrt
+import numpy as np
+
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, args):
+        super(MultiHeadAttention, self).__init__()
+        self.num_heads = args.num_heads
+        self.dim_in = args.hidden_dim
+        self.dim_out = args.hidden_dim
+        self.W_Q = nn.Linear(self.dim_in, self.num_heads * self.dim_out, bias=False)
+        self.W_K = nn.Linear(self.dim_in, self.num_heads * self.dim_out, bias=False)
+        self.W_V = nn.Linear(self.dim_in, self.num_heads * self.dim_out, bias=False)
+        self.linear = nn.Linear(self.num_heads * self.dim_out, self.dim_out, bias=False)
+        self.layer_norm = nn.LayerNorm(self.dim_out)
+        self.dropout = nn.Dropout(0.1)
+
+    def forward(self, x):
+        residual = x
+        x_size = x.size(0)
+
+        Q = self.W_Q(x).view(x_size, self.num_heads, self.dim_out).transpose(0, 1)  # q_s: [batch_size x n_heads x len_q x d_k]
+        K = self.W_K(x).view(x_size, self.num_heads, self.dim_out).transpose(0, 1)  # k_s: [batch_size x n_heads x len_k x d_k]
+        V = self.W_V(x).view(x_size, self.num_heads, self.dim_out).transpose(0, 1)  # v_s: [batch_size x n_heads x len_k x d_v]
+
+        scores = torch.matmul(Q, K.transpose(1, 2)) / np.sqrt(self.dim_out)
+        dist = torch.softmax(scores, dim=-1)
+        attention = torch.matmul(dist, V)
+        attention = attention.transpose(0, 1).contiguous().view(x_size, self.num_heads * self.dim_out)
+        output = self.linear(attention)
+        output = self.dropout(output)
+
+        return self.layer_norm(output + residual)
 
 
 class DecomLayer(nn.Module):
     def __init__(self, args):
         super(DecomLayer, self).__init__()
         self.device = args.device
-        self.attention = args.attention
+        self.ret = args.attention
+        self.attention = MultiHeadAttention(args)
         self.dim_in = args.hidden_dim
-        self.dim_out = args.hidden_dim
+        self.dim_out = args.hidden_dim*4
         self.num_heads = args.num_heads
-        # self.norm_fact = 1 / sqrt(self.dim_out // self.num_heads)
-        self.norm_fact = 1 / sqrt(self.dim_out)
+        self.norm_fact = 1 / sqrt(self.dim_out // self.num_heads)
+        # self.norm_fact = 1 / sqrt(self.dim_out)
         self.linear_q = nn.Linear(self.dim_in, self.dim_out, bias=False)
         self.linear_k = nn.Linear(self.dim_in, self.dim_out, bias=False)
         self.linear_v = nn.Linear(self.dim_in, self.dim_out, bias=False)
 
     def calculate_att(self, x, batch, batch_size):
         # 多头注意力
-        # num_heads = self.num_heads
-        # dim_out = self.dim_out // num_heads  # dim_k of each head
-        #
-        # Q = self.linear_q(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dk)
-        # K = self.linear_k(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dk)
-        # V = self.linear_v(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dv)
-        #
-        # dist = torch.matmul(Q, K.transpose(1, 2)) * self.norm_fact  # batch, nh, n, n
-        # dist = torch.softmax(dist, dim=-1)  # nh, n, n
-        #
-        # att = torch.matmul(dist, V)  # nh, n, dv
-        # att = att.transpose(0, 1).reshape(3, self.dim_out)  # n, dim_v
+        num_heads = self.num_heads
+        dim_out = self.dim_out // num_heads  # dim_k of each head
+
+        Q = self.linear_q(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dk)
+        K = self.linear_k(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dk)
+        V = self.linear_v(x).reshape(3, num_heads, dim_out).transpose(0, 1)  # (nh, n, dv)
+
+        dist = torch.matmul(Q, K.transpose(1, 2)) * self.norm_fact  # batch, nh, n, n
+        dist = torch.softmax(dist, dim=-1)  # nh, n, n
+
+        att = torch.matmul(dist, V)  # nh, n, dv
+        att = att.transpose(0, 1).reshape(3, self.dim_out)  # n, dim_v
 
         # 单头注意力
-        Q = self.linear_q(x)
-        K = self.linear_k(x)
-        V = self.linear_v(x)
-
-        dist = (Q @ K.T) * self.norm_fact
-        dist = torch.softmax(dist, dim=-1)
-        att = dist @ V
+        # Q = self.linear_q(x)
+        # K = self.linear_k(x)
+        # V = self.linear_v(x)
+        #
+        # dist = (Q @ K.T) * self.norm_fact
+        # dist = torch.softmax(dist, dim=-1)
+        # att = dist @ V
 
         return att
 
@@ -67,8 +100,8 @@ class DecomLayer(nn.Module):
             x_dec = global_add_pool(coefs, d_index[i][0].to(self.device))
             # x_dec = torch.cat([global_mean_pool(coefs, d_index[i][0].to(self.device)), global_add_pool(coefs,
             # d_index[i][0].to(self.device))], dim=1)
-            if self.attention:
-                x_dec = self.calculate_att(x_dec, batch, batch_size)
+            if self.ret:
+                x_dec = self.attention(x_dec)
 
             if i == 0:
                 x_pool = x_dec.flatten()
