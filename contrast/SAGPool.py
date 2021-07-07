@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
-from torch_geometric.nn import GCNConv, SAGEConv, GATConv, SAGPooling
+from torch_geometric.nn import GCNConv, SAGPooling
 
 
 class SAGPool(nn.Module):

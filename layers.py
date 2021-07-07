@@ -18,7 +18,7 @@ class MultiHeadAttention(nn.Module):
         self.W_V = nn.Linear(self.dim_in, self.num_heads * self.dim_out, bias=False)
         self.linear = nn.Linear(self.num_heads * self.dim_out, self.dim_out, bias=False)
         self.layer_norm = nn.LayerNorm(self.dim_out)
-        self.dropout = nn.Dropout(0.1)
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
         residual = x
@@ -29,8 +29,8 @@ class MultiHeadAttention(nn.Module):
         V = self.W_V(x).view(x_size, self.num_heads, self.dim_out).transpose(0, 1)  # v_s: [batch_size x n_heads x len_k x d_v]
 
         scores = torch.matmul(Q, K.transpose(1, 2)) / np.sqrt(self.dim_out)
-        dist = torch.softmax(scores, dim=-1)
-        attention = torch.matmul(dist, V)
+        scores = torch.softmax(scores, dim=-1)
+        attention = torch.matmul(scores, V)
         attention = attention.transpose(0, 1).contiguous().view(x_size, self.num_heads * self.dim_out)
         output = self.linear(attention)
         output = self.dropout(output)

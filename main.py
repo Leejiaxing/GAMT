@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import random
 from contrast.SAGPool import SAGPool
 from contrast.HGPSL import HGPSL
+from contrast.EdgePool import EdgePool
 from model import Model
 from utils import dataset_init, com_feature, k_fold
 from torch_geometric.datasets import TUDataset
@@ -18,17 +19,18 @@ parser = argparse.ArgumentParser(description='Multi-Scale Self-Attention Mixup f
 parser.add_argument('--seed', type=int, default=777, help='random seed')
 parser.add_argument('--exp_way', type=str, default='k_fold', help='random-split or cross-validation ')
 parser.add_argument('--repetitions', type=int, default=10, help='number of repetitions (default: 10)')
-parser.add_argument('--batch_size', type=int, default=64, help='batch size')
-parser.add_argument('--lr', type=float, default=0.0001, help='learning rate')
+parser.add_argument('--batch_size', type=int, default=256, help='batch size')
+parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
 parser.add_argument('--weight_decay', type=float, default=0.001, help='weight decay')
-parser.add_argument('--mixup', type=bool, default=True, help='whether use mixup')
+parser.add_argument('--mixup', type=bool, default=False, help='whether use mixup')
 parser.add_argument('--attention', type=bool, default=True, help='whether use self-attention')
 parser.add_argument('--hidden_dim', type=int, default=128, help='hidden size')
 parser.add_argument('--dropout', type=float, default=0.0, help='dropout ratio')
-parser.add_argument('--dataset', type=str, default='DD', help='PROTEINS/DD/NCI1/NCI109/Mutagenicity/ENZYMES/IMDB-BINARY')
+parser.add_argument('--dataset', type=str, default='PROTEINS', help='PROTEINS/DD/NCI1/NCI109/Mutagenicity/ENZYMES'
+                                                                  '/IMDB-BINARY/PTC_FM')
 parser.add_argument('--device', type=str, default='cuda:0', help='specify cuda devices')
 parser.add_argument('--epochs', type=int, default=5000, help='maximum number of epochs')
-parser.add_argument('--patience', type=int, default=300, help='patience for early stopping')
+parser.add_argument('--patience', type=int, default=150, help='patience for early stopping')
 parser.add_argument('--num_heads', type=int, default=8, help='alpha for mixup')
 parser.add_argument('--alpha', type=int, default=0.1, help='alpha for mixup')
 parser.add_argument('--Lev', type=int, default=2, help='level of transform (default: 2)')
@@ -122,7 +124,6 @@ def test_model(model, loader):
             correct += pred.eq(data.y).sum().item()
             test_loss += F.nll_loss(out, data.y).item()
     test_acc = correct / len(loader.dataset)
-    # loss = test_loss / len(loader.dataset)
     return test_acc, test_loss
 
 
@@ -137,7 +138,7 @@ if __name__ == '__main__':
     if args.num_features == 0:
         dataset = com_feature(dataset)
         args.num_features = 1
-    dataset, r = dataset_init(dataset, args)
+    # dataset, r = dataset_init(dataset, args)
     myDataset = Dataset(args, dataset)
 
     print(args)
@@ -149,7 +150,8 @@ if __name__ == '__main__':
             train_loader, val_loader, test_loader = myDataset.randomly_split()
 
         # Model initialization
-        model = Model(args, r).to(args.device)
+        # model = Model(args, r).to(args.device)
+        model = EdgePool(args, num_layers=3).to(args.device)
         model.reset_parameters()
         # model = HGPSL(args).to(args.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
