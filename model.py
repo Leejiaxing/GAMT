@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, JumpingKnowledge
-
 from layers import DecomLayer
 
 
@@ -14,17 +13,17 @@ class Model(nn.Module):
         self.dropout = args.dropout
         self.num_classes = args.num_classes
         self.num_features = args.num_features
-        self.nhid = args.hidden_dim
+        self.hidden_dim = args.hidden_dim
 
-        self.conv1 = GCNConv(self.num_features, self.nhid)
-        self.conv2 = GCNConv(self.nhid, self.nhid)
-        self.conv3 = GCNConv(self.nhid, self.nhid)
+        self.conv1 = GCNConv(self.num_features, self.hidden_dim)
+        self.conv2 = GCNConv(self.hidden_dim, self.hidden_dim)
+        self.conv3 = GCNConv(self.hidden_dim, self.hidden_dim)
 
         self.decomposition = DecomLayer(args).to(args.device)
 
-        self.fc1 = nn.Linear(((r - 1) * args.Lev + 1) * self.nhid, self.nhid)
-        self.fc2 = nn.Linear(self.nhid, self.nhid // 2)
-        self.fc3 = nn.Linear(self.nhid // 2, self.num_classes)
+        self.fc1 = nn.Linear(((r - 1) * args.Lev + 1) * self.hidden_dim, self.hidden_dim)
+        self.fc2 = nn.Linear(self.hidden_dim, self.hidden_dim // 2)
+        self.fc3 = nn.Linear(self.hidden_dim// 2, self.num_classes)
 
     def reset_parameters(self):
         self.conv1.reset_parameters()
@@ -81,7 +80,7 @@ class Model(nn.Module):
 
 class ModelwithJK(nn.Module):
     def __init__(self, args, r):
-        super(Model, self).__init__()
+        super(ModelwithJK, self).__init__()
         self.args = args
         self.dropout = args.dropout
         self.num_classes = args.num_classes
@@ -94,8 +93,8 @@ class ModelwithJK(nn.Module):
 
         self.decomposition = DecomLayer(args).to(args.device)
         self.jump = JumpingKnowledge('cat')
-        self.fc1 = nn.Linear(((r - 1) * args.Lev + 1) * self.nhid *3, self.nhid *3)
-        self.fc2 = nn.Linear(self.nhid * 3, self.nhid )
+        self.fc1 = nn.Linear(((r - 1) * args.Lev + 1) * self.nhid * 3, self.nhid * 3)
+        self.fc2 = nn.Linear(self.nhid * 3, self.nhid)
         self.fc3 = nn.Linear(self.nhid, self.num_classes)
 
     def reset_parameters(self):

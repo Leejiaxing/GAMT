@@ -4,32 +4,18 @@ import torch
 from torch.utils.data import Subset, random_split
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.data import DataLoader, Data
-from math import floor
 from functools import reduce
 from scipy import io
-
+from utils import K_Fold
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 
-def K_Fold(k, len):
-    split = []
-    counter = 0
-    block = len / k
-    while counter < len - 0.5:
-        c = counter + block
-        split.append(list(range(floor(counter + 0.5), floor(c + 0.5))))
-        counter = c
-    all_index = list(range(len))
-    np.random.shuffle(all_index)
-    return [np.take(all_index, i, axis=0).tolist() for i in split]
-
-
 class Dataset:
-    def __init__(self, args, dataset):
+    def __init__(self, args, dataset, split):
         self.dataset = dataset
         self.batch_size = args.batch_size
         self.k_fold = args.repetitions
-        self.k_fold_split = K_Fold(self.k_fold, len(self.dataset))
+        self.k_fold_split = split
 
     def randomly_split(self, train_ratio=0.8, val_ratio=0.1):
         # trainset:validset:testset = 8:1:1
@@ -48,14 +34,20 @@ class Dataset:
     def kfold_split(self, test_index):
         assert test_index < self.k_fold
         valid_index = (test_index + 1) % self.k_fold
+        # valid_index = test_index-1
         test_split = self.k_fold_split[test_index]
         valid_split = self.k_fold_split[valid_index]
-        train_split = reduce(lambda i, d: i if d[0] == test_index or d[0] == valid_index else i + d[1],
-                             enumerate(self.k_fold_split), [])
 
-        train_subset = Subset(self.dataset, train_split)
-        valid_subset = Subset(self.dataset, valid_split)
-        test_subset = Subset(self.dataset, test_split)
+        # train_split = reduce(lambda i, d: i if d[0] == test_index or d[0] == valid_index else i + d[1],
+        #                      enumerate(self.k_fold_split), [])
+        train_mask = np.ones(len(self.dataset))
+        train_mask[test_split] = 0
+        train_mask[valid_split] = 0
+        train_split = train_mask.nonzero()[0]
+
+        train_subset = Subset(self.dataset, train_split.tolist())
+        valid_subset = Subset(self.dataset, valid_split.tolist())
+        test_subset = Subset(self.dataset, test_split.tolist())
 
         train_loader = DataLoader(train_subset, batch_size=self.batch_size, shuffle=True)
         val_loader = DataLoader(valid_subset, batch_size=self.batch_size, shuffle=False)
