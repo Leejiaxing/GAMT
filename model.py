@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, JumpingKnowledge
-from layers import DecomLayer
+from layers import MultiScaleLayer
 
 
 class Model(nn.Module):
@@ -13,22 +13,25 @@ class Model(nn.Module):
         self.dropout = args.dropout
         self.num_classes = args.num_classes
         self.num_features = args.num_features
+        self.num_layers = args.num_layers
         self.hidden_dim = args.hidden_dim
+        self.scale = (r - 1) * args.Lev + 1
 
         self.conv1 = GCNConv(self.num_features, self.hidden_dim)
-        self.conv2 = GCNConv(self.hidden_dim, self.hidden_dim)
-        self.conv3 = GCNConv(self.hidden_dim, self.hidden_dim)
+        self.convs = torch.nn.ModuleList()
+        for i in range(self.num_layers - 1):
+            self.convs.append(GCNConv(self.hidden_dim, self.hidden_dim))
 
-        self.decomposition = DecomLayer(args).to(args.device)
+        self.multi_scale = MultiScaleLayer(args).to(args.device)
 
-        self.fc1 = nn.Linear(((r - 1) * args.Lev + 1) * self.hidden_dim, self.hidden_dim)
+        self.fc1 = nn.Linear(self.scale * self.hidden_dim, self.hidden_dim)
         self.fc2 = nn.Linear(self.hidden_dim, self.hidden_dim // 2)
-        self.fc3 = nn.Linear(self.hidden_dim// 2, self.num_classes)
+        self.fc3 = nn.Linear(self.hidden_dim // 2, self.num_classes)
 
     def reset_parameters(self):
         self.conv1.reset_parameters()
-        self.conv2.reset_parameters()
-        self.conv3.reset_parameters()
+        for conv in self.convs:
+            conv.reset_parameters()
         self.fc1.reset_parameters()
         self.fc2.reset_parameters()
         self.fc3.reset_parameters()
@@ -55,11 +58,11 @@ class Model(nn.Module):
 
             # 3 convolutional layers
             x = F.relu(self.conv1(x, edge_index))
-            x = F.relu(self.conv2(x, edge_index))
-            x = F.relu(self.conv3(x, edge_index))
+            for conv in self.convs:
+                x = F.relu(conv(x, edge_index))
 
-            # 1 Framelet decomposition layer
-            x = self.decomposition(x, batch, batch_size, d, d_index)
+            # 1 Framelet transform layer
+            x = self.multi_scale(x, batch, batch_size, d, d_index)
             x_mix = lam * x + (1 - lam) * x[perm, :]
             x = self.fc_forward(x_mix)
 
@@ -67,11 +70,11 @@ class Model(nn.Module):
         else:
             # 3 convolutional layers
             x = F.relu(self.conv1(x, edge_index))
-            x = F.relu(self.conv2(x, edge_index))
-            x = F.relu(self.conv3(x, edge_index))
+            for conv in self.convs:
+                x = F.relu(conv(x, edge_index))
 
-            # 1 Framelet decomposition layer
-            x = self.decomposition(x, batch, batch_size, d, d_index)
+            # 1 Framelet transform layer
+            x = self.multi_scale(x, batch, batch_size, d, d_index)
 
             x = self.fc_forward(x)
 
@@ -85,17 +88,17 @@ class ModelwithJK(nn.Module):
         self.dropout = args.dropout
         self.num_classes = args.num_classes
         self.num_features = args.num_features
-        self.nhid = args.hidden_dim
+        self.hidden_dim = args.hidden_dim
 
-        self.conv1 = GCNConv(self.num_features, self.nhid)
-        self.conv2 = GCNConv(self.nhid, self.nhid)
-        self.conv3 = GCNConv(self.nhid, self.nhid)
+        self.conv1 = GCNConv(self.num_features, self.hidden_dim)
+        self.conv2 = GCNConv(self.hidden_dim, self.hidden_dim)
+        self.conv3 = GCNConv(self.hidden_dim, self.hidden_dim)
 
-        self.decomposition = DecomLayer(args).to(args.device)
+        self.decomposition = MultiScaleLayer(args).to(args.device)
         self.jump = JumpingKnowledge('cat')
-        self.fc1 = nn.Linear(((r - 1) * args.Lev + 1) * self.nhid * 3, self.nhid * 3)
-        self.fc2 = nn.Linear(self.nhid * 3, self.nhid)
-        self.fc3 = nn.Linear(self.nhid, self.num_classes)
+        self.fc1 = nn.Linear(((r - 1) * args.Lev + 1) * self.hidden_dim * 3, self.hidden_dim * 3)
+        self.fc2 = nn.Linear(self.hidden_dim * 3, self.hidden_dim)
+        self.fc3 = nn.Linear(self.hidden_dim, self.num_classes)
 
     def reset_parameters(self):
         self.jump.reset_parameters()

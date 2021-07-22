@@ -39,9 +39,9 @@ class MultiHeadAttention(nn.Module):
         return self.layer_norm(output + residual)
 
 
-class DecomLayer(nn.Module):
+class MultiScaleLayer(nn.Module):
     def __init__(self, args):
-        super(DecomLayer, self).__init__()
+        super(MultiScaleLayer, self).__init__()
         self.device = args.device
         self.ret = args.attention
         self.attention = MultiHeadAttention(args)

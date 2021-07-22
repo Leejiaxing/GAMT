@@ -4,7 +4,7 @@ from scipy.sparse.linalg import lobpcg
 import torch
 from torch_geometric.data import Data, DataLoader
 from torch_geometric.utils import get_laplacian, degree
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, KFold
 from math import floor
 
 
@@ -20,13 +20,6 @@ def scipy_to_torch_sparse(A, device='cuda:0'):
     value = torch.Tensor(A.data).to(device)
 
     return index, value, m, n
-    # A = sparse.coo_matrix(A)
-    # row = torch.tensor(A.row, device=device)
-    # col = torch.tensor(A.col, device=device)
-    # index = torch.stack((row, col), dim=0)
-    # value = torch.Tensor(A.data).to(device)
-    #
-    # return torch.sparse_coo_tensor(index, value, A.shape).to(device)
 
 
 # function for pre-processing
@@ -126,19 +119,11 @@ def dataset_init(dataset, args):
 
 
 def K_Fold(folds, dataset):
-    skf = StratifiedKFold(folds, shuffle=True, random_state=0)
+    skf = StratifiedKFold(folds, shuffle=True, random_state=12345)
 
     test_indices, train_indices = [], []
     for _, idx in skf.split(torch.zeros(len(dataset)), dataset.data.y):
         test_indices.append(idx)
-
-    # val_indices = [test_indices[i - 1] for i in range(folds)]
-    # np.ones()
-    # for i in range(folds):
-    #     train_mask = np.ones(len(dataset), dtype=bool)
-    #     train_mask[test_indices[i]] = 0
-    #     train_mask[val_indices[i]] = 0
-    #     train_indices.append(train_mask.nonzero().view(-1))
 
     return test_indices
 
