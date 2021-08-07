@@ -5,12 +5,11 @@ import torch
 from torch_geometric.data import Data, DataLoader
 from torch_geometric.utils import get_laplacian, degree
 from sklearn.model_selection import StratifiedKFold, KFold
-from math import floor
 
 
 # function for pre-processing
 @torch.no_grad()
-def scipy_to_torch_sparse(A, device='cuda:0'):
+def scipy_to_torch_sparse(A, device):
     A = sparse.coo_matrix(A)
     m = A.shape[0]
     n = A.shape[1]
@@ -78,6 +77,7 @@ def dataset_init(dataset, args):
     D2 = lambda x: np.sin(x / 2)
     DFilters = [D1, D2]
     r = len(DFilters)
+    args.r = r
     Lev = args.Lev
     s = args.s
     n = args.n
@@ -115,27 +115,14 @@ def dataset_init(dataset, args):
         # append data1 into dataset1
         dataset_temp.append(data_temp)
 
-    return dataset_temp, r
+    return dataset_temp
 
 
 def K_Fold(folds, dataset):
     skf = StratifiedKFold(folds, shuffle=True, random_state=12345)
-
-    test_indices, train_indices = [], []
-    for _, idx in skf.split(torch.zeros(len(dataset)), dataset.data.y):
-        test_indices.append(idx)
+    test_indices = []
+    for _, index in skf.split(torch.zeros(len(dataset)), dataset.data.y):
+        test_indices.append(index)
 
     return test_indices
 
-
-def K_fold(k, len):
-    split = []
-    counter = 0
-    block = len / k
-    while counter < len - 0.5:
-        c = counter + block
-        split.append(list(range(floor(counter + 0.5), floor(c + 0.5))))
-        counter = c
-    all_index = list(range(len))
-    np.random.shuffle(all_index)
-    return [np.take(all_index, i, axis=0).tolist() for i in split]

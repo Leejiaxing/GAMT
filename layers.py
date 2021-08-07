@@ -61,7 +61,7 @@ class MultiScaleLayer(nn.Module):
         for i in range(batch_size):
             # extract the i-th graph
             bi = (batch == i)
-            index, value, m, n = scipy_to_torch_sparse(d_list[i][0])
+            index, value, m, n = scipy_to_torch_sparse(d_list[i][0], device=self.device)
             coefs = spmm(index, value, m, n, x[bi, :])
             # coefs = torch.sparse.mm(scipy_to_torch_sparse(d_list[i][0]).to(device), x[bi, :])
             x_dec = global_add_pool(coefs, d_index[i][0].to(self.device))

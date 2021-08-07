@@ -33,12 +33,10 @@ def train_model(args, model, optimizer, train_loader, val_loader, test_loader, i
             # zero the parameter gradients
             optimizer.zero_grad()
             data = data.to(args.device)
-            if args.mixup:
-                out, y_b, lam = model(data, mixup=True, alpha=args.alpha)
-                loss = lam * F.nll_loss(out, data.y) + (1 - lam) * F.nll_loss(out, y_b)
-            else:
-                out = model(data)
-                loss = F.nll_loss(out, data.y)
+            out, y_b, lam = model(data, mixup=True, alpha=args.alpha)
+            loss = lam * F.nll_loss(out, data.y) + (1 - lam) * F.nll_loss(out, y_b)
+            # out = model(data)
+            # loss = F.nll_loss(out, data.y)
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
