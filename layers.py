@@ -25,9 +25,9 @@ class MultiHeadAttention(nn.Module):
         residual = x
         x_size = x.size(0)
 
-        Q = self.W_Q(x).view(x_size, self.num_heads, self.dim_out).transpose(0, 1)  # q_s: [batch_size x n_heads x len_q x d_k]
-        K = self.W_K(x).view(x_size, self.num_heads, self.dim_out).transpose(0, 1)  # k_s: [batch_size x n_heads x len_k x d_k]
-        V = self.W_V(x).view(x_size, self.num_heads, self.dim_out).transpose(0, 1)  # v_s: [batch_size x n_heads x len_k x d_v]
+        Q = self.W_Q(x).view(x_size, self.num_heads, self.dim_out).transpose(0, 1)
+        K = self.W_K(x).view(x_size, self.num_heads, self.dim_out).transpose(0, 1)
+        V = self.W_V(x).view(x_size, self.num_heads, self.dim_out).transpose(0, 1)
 
         scores = torch.matmul(Q, K.transpose(1, 2)) / np.sqrt(self.dim_out)
         scores = torch.softmax(scores, dim=-1)
@@ -63,10 +63,7 @@ class MultiScaleLayer(nn.Module):
             bi = (batch == i)
             index, value, m, n = scipy_to_torch_sparse(d_list[i][0], device=self.device)
             coefs = spmm(index, value, m, n, x[bi, :])
-            # coefs = torch.sparse.mm(scipy_to_torch_sparse(d_list[i][0]).to(device), x[bi, :])
             x_dec = global_add_pool(coefs, d_index[i][0].to(self.device))
-            # x_dec = torch.cat([global_mean_pool(coefs, d_index[i][0].to(self.device)), global_add_pool(coefs,
-            # d_index[i][0].to(self.device))], dim=1)
             if self.ret:
                 x_dec = self.attention(x_dec)
 

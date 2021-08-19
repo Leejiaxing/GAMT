@@ -23,11 +23,11 @@ class GCN(nn.Module):
         self.num_classes = args.num_classes
         self.dropout = args.dropout
 
-        self.conv1 = GCNConv(self.num_features, self.hidden_dim)
-        self.conv2 = GCNConv(self.hidden_dim, self.hidden_dim)
-        self.conv3 = GCNConv(self.hidden_dim, self.hidden_dim)
+        self.conv1 = SAGEConv(self.num_features, self.hidden_dim)
+        self.conv2 = SAGEConv(self.hidden_dim, self.hidden_dim)
+        self.conv3 = SAGEConv(self.hidden_dim, self.hidden_dim)
 
-        self.fc1 = nn.Linear(self.hidden_dim * 3, self.hidden_dim)
+        self.fc1 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.fc2 = nn.Linear(self.hidden_dim, self.hidden_dim // 2)
         self.fc3 = nn.Linear(self.hidden_dim // 2, self.num_classes)
 
@@ -53,15 +53,15 @@ class GCN(nn.Module):
             y_perm = y[perm]
 
             x = F.relu(self.conv1(x, edge_index, edge_attr))
-            x1 = torch.cat([global_mean_pool(x, batch), global_max_pool(x, batch), global_add_pool(x, batch)], dim=1)
+            x1 = global_mean_pool(x, batch)
             x1_mix = lam * x1 + (1 - lam) * x1[perm, :]
 
             x = F.relu(self.conv2(x, edge_index, edge_attr))
-            x2 = torch.cat([global_mean_pool(x, batch), global_max_pool(x, batch), global_add_pool(x, batch)], dim=1)
+            x2 = global_mean_pool(x, batch)
             x2_mix = lam * x2 + (1 - lam) * x2[perm, :]
 
             x = F.relu(self.conv3(x, edge_index, edge_attr))
-            x3 = torch.cat([global_mean_pool(x, batch), global_max_pool(x, batch), global_add_pool(x, batch)], dim=1)
+            x3 = global_mean_pool(x, batch)
             x3_mix = lam * x3 + (1 - lam) * x3[perm, :]
             x = x1_mix + x2_mix + x3_mix
             x = self.fc_forward(x)
@@ -69,13 +69,13 @@ class GCN(nn.Module):
             return x, y_perm, lam
         else:
             x = F.relu(self.conv1(x, edge_index, edge_attr))
-            x1 = torch.cat([global_mean_pool(x, batch), global_max_pool(x, batch), global_add_pool(x, batch)], dim=1)
+            x1 = global_mean_pool(x, batch)
 
             x = F.relu(self.conv2(x, edge_index, edge_attr))
-            x2 = torch.cat([global_mean_pool(x, batch), global_max_pool(x, batch), global_add_pool(x, batch)], dim=1)
+            x2 = global_mean_pool(x, batch)
 
             x = F.relu(self.conv3(x, edge_index, edge_attr))
-            x3 = torch.cat([global_mean_pool(x, batch), global_max_pool(x, batch), global_add_pool(x, batch)], dim=1)
+            x3 = global_mean_pool(x, batch)
             x = x1 + x2 + x3
             x = self.fc_forward(x)
 

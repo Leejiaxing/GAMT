@@ -5,9 +5,6 @@ import torch
 from torch.utils.data import Subset, random_split
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.data import DataLoader, Data
-from functools import reduce
-from scipy import io
-from utils import K_Fold
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 
@@ -52,8 +49,6 @@ class Dataset:
         test_loader = DataLoader(test_subset, batch_size=self.batch_size, shuffle=False)
 
         return train_loader, val_loader, test_loader
-
-
 
 
 class MultiCenterDataset:

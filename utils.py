@@ -118,8 +118,8 @@ def dataset_init(dataset, args):
     return dataset_temp
 
 
-def K_Fold(folds, dataset):
-    skf = StratifiedKFold(folds, shuffle=True, random_state=12345)
+def K_Fold(folds, dataset, seed):
+    skf = StratifiedKFold(folds, shuffle=True, random_state=seed)
     test_indices = []
     for _, index in skf.split(torch.zeros(len(dataset)), dataset.data.y):
         test_indices.append(index)

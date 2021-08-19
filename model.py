@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Sequential, Linear, ReLU, BatchNorm1d as BN
-from torch_geometric.nn import GCNConv, GINConv, GATConv, SAGEConv
+from torch_geometric.nn import GCNConv, GINConv, GATConv, SAGEConv, global_mean_pool
 from layers import MultiScaleLayer
 
 
@@ -18,10 +18,10 @@ class Model(nn.Module):
         self.hidden_dim = args.hidden_dim
         self.scale = (args.r - 1) * args.Lev + 1
 
-        self.conv1 = GATConv(self.num_features, self.hidden_dim)
+        self.conv1 = GCNConv(self.num_features, self.hidden_dim)
         self.convs = torch.nn.ModuleList()
         for i in range(self.num_layers - 1):
-            self.convs.append(GATConv(self.hidden_dim, self.hidden_dim))
+            self.convs.append(GCNConv(self.hidden_dim, self.hidden_dim))
 
         self.multi_scale = MultiScaleLayer(args).to(args.device)
 
@@ -79,7 +79,7 @@ class Model(nn.Module):
 
 
 class ModelHierarchical(nn.Module):
-    def __init__(self, args, r):
+    def __init__(self, args):
         super(ModelHierarchical, self).__init__()
         self.args = args
         self.dropout = args.dropout
@@ -87,7 +87,7 @@ class ModelHierarchical(nn.Module):
         self.num_features = args.num_features
         self.num_layers = args.num_layers
         self.hidden_dim = args.hidden_dim
-        self.scale = (r - 1) * args.Lev + 1
+        self.scale = (args.r - 1) * args.Lev + 1
 
         self.conv1 = GCNConv(self.num_features, self.hidden_dim)
         self.convs = torch.nn.ModuleList()
@@ -138,8 +138,6 @@ class ModelHierarchical(nn.Module):
                 x_mix = lam * x_h + (1 - lam) * x_h[perm, :]
                 xs += [x_mix]
             x = torch.cat(xs, dim=-1)
-            # x = self.multi_scale(x, batch, batch_size, d, d_index)
-            # x_mix = lam * x + (1 - lam) * x[perm, :]
             x = self.fc_forward(x)
 
             return x, y_perm, lam
@@ -158,7 +156,7 @@ class ModelHierarchical(nn.Module):
 
 
 class ModelwithGIN(nn.Module):
-    def __init__(self, args, r):
+    def __init__(self, args):
         super(ModelwithGIN, self).__init__()
         self.args = args
         self.dropout = args.dropout
@@ -166,14 +164,14 @@ class ModelwithGIN(nn.Module):
         self.num_features = args.num_features
         self.num_layers = args.num_layers
         self.hidden_dim = args.hidden_dim
-        self.scale = (r - 1) * args.Lev + 1
+        # self.scale = (args.r - 1) * args.Lev + 1
         self.conv1 = GINConv(
             Sequential(
                 Linear(self.num_features, self.hidden_dim),
                 ReLU(),
                 Linear(self.hidden_dim, self.hidden_dim),
                 ReLU(),
-                BN(self.hidden),
+                BN(self.hidden_dim),
             ), train_eps=True)
         self.convs = torch.nn.ModuleList()
         for i in range(self.num_layers - 1):
@@ -189,9 +187,9 @@ class ModelwithGIN(nn.Module):
 
         self.multi_scale = MultiScaleLayer(args).to(args.device)
 
-        self.fc1 = nn.Linear(self.scale * self.hidden_dim, self.hidden_dim)
+        self.fc1 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.fc2 = nn.Linear(self.hidden_dim, self.hidden_dim // 2)
-        self.fc3 = nn.Linear(self.hidden_dim // 2, self.num_classes)
+        self.fc3 = nn.Linear(self.hidden_dim, self.num_classes)
 
     def reset_parameters(self):
         self.conv1.reset_parameters()
@@ -204,37 +202,88 @@ class ModelwithGIN(nn.Module):
     def fc_forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.dropout(x, p=self.dropout, training=self.training)
-        x = F.relu(self.fc2(x))
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        # x = F.relu(self.fc2(x))
+        # x = F.dropout(x, p=self.dropout, training=self.training)
         x = F.log_softmax(self.fc3(x), dim=-1)
         return x
 
     def forward(self, data, mixup=False, alpha=0.1):
-        x, y, edge_index, batch, d, d_index = data.x, data.y, data.edge_index, data.batch, data.d, data.d_index
-        batch_size = int(batch.max() + 1)
+        # x, y, edge_index, batch, d, d_index = data.x, data.y, data.edge_index, data.batch, data.d, data.d_index
+        # batch_size = int(batch.max() + 1)
+        #
+        # if mixup:
+        #     if alpha > 0.0:
+        #         lam = np.random.beta(alpha, alpha)
+        #     else:
+        #         lam = 1.0
+        #     perm = torch.randperm(y.size(0), device=self.args.device)
+        #     y_perm = y[perm]
+        #
+        #     x = self.conv1(x, edge_index)
+        #     for conv in self.convs:
+        #         x = conv(x, edge_index)
+        #
+        #     x = self.multi_scale(x, batch, batch_size, d, d_index)
+        #     x_mix = lam * x + (1 - lam) * x[perm, :]
+        #     x = self.fc_forward(x_mix)
+        #
+        #     return x, y_perm, lam
+        # else:
+        #     x = self.conv1(x, edge_index)
+        #     for conv in self.convs:
+        #         x = conv(x, edge_index)
+        #     # x = self.multi_scale(x, batch, batch_size, d, d_index)
+        #     x = self.fc_forward(x)
+        #
+        #     return x
+        x, edge_index, batch = data.x, data.edge_index, data.batch
+        x = self.conv1(x, edge_index)
+        for conv in self.convs:
+            x = conv(x, edge_index)
+        x = global_mean_pool(x, batch)
+        x = self.fc_forward(x)
+        return x
 
-        if mixup:
-            if alpha > 0.0:
-                lam = np.random.beta(alpha, alpha)
-            else:
-                lam = 1.0
-            perm = torch.randperm(y.size(0), device=self.args.device)
-            y_perm = y[perm]
 
-            x = self.conv1(x, edge_index)
-            for conv in self.convs:
-                x = conv(x, edge_index)
+class GIN(torch.nn.Module):
+    def __init__(self, dataset, num_layers, hidden):
+        super(GIN, self).__init__()
+        self.conv1 = GINConv(
+            Sequential(
+                Linear(dataset.num_features, hidden),
+                ReLU(),
+                Linear(hidden, hidden),
+                ReLU(),
+                BN(hidden),
+            ), train_eps=True)
+        self.convs = torch.nn.ModuleList()
+        for i in range(num_layers - 1):
+            self.convs.append(
+                GINConv(
+                    Sequential(
+                        Linear(hidden, hidden),
+                        ReLU(),
+                        Linear(hidden, hidden),
+                        ReLU(),
+                        BN(hidden),
+                    ), train_eps=True))
+        self.lin1 = Linear(hidden, hidden)
+        self.lin2 = Linear(hidden, dataset.num_classes)
 
-            x = self.multi_scale(x, batch, batch_size, d, d_index)
-            x_mix = lam * x + (1 - lam) * x[perm, :]
-            x = self.fc_forward(x_mix)
+    def reset_parameters(self):
+        self.conv1.reset_parameters()
+        for conv in self.convs:
+            conv.reset_parameters()
+        self.lin1.reset_parameters()
+        self.lin2.reset_parameters()
 
-            return x, y_perm, lam
-        else:
-            x = self.conv1(x, edge_index)
-            for conv in self.convs:
-                x = conv(x, edge_index)
-            x = self.multi_scale(x, batch, batch_size, d, d_index)
-            x = self.fc_forward(x)
-
-            return x
+    def forward(self, data):
+        x, edge_index, batch = data.x, data.edge_index, data.batch
+        x = self.conv1(x, edge_index)
+        for conv in self.convs:
+            x = conv(x, edge_index)
+        x = global_mean_pool(x, batch)
+        x = F.relu(self.lin1(x))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = self.lin2(x)
+        return F.log_softmax(x, dim=-1)
