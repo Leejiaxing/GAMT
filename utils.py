@@ -121,12 +121,13 @@ def dataset_init(dataset, args):
 
 
 def K_Fold(folds, dataset, seed):
-    skf = StratifiedKFold(folds, shuffle=True, random_state=seed)
+    skf = KFold(folds, shuffle=True, random_state=12345)
     test_indices = []
     for _, index in skf.split(torch.zeros(len(dataset)), dataset.data.y):
         test_indices.append(index)
 
     return test_indices
+
 
 class NormalizedDegree(object):
     def __init__(self, mean, std):
