@@ -2,21 +2,16 @@ import argparse
 
 import numpy as np
 import torch
-from model import Model, ModelHierarchical, ModelwithGIN
-from contrast.SortPool import SortPool
-from contrast.EdgePool import EdgePool
-from contrast.TopkPool import TopK
-from contrast.GIN import GIN
-from utils import dataset_init, com_feature, K_Fold, get_dataset
+from model import Model, ModelHierarchical
+from utils import dataset_init, K_Fold, get_dataset
 from train_test import test_model, train_model, setup_seed
-from torch_geometric.datasets import TUDataset
 from load_data import Dataset
 
 parser = argparse.ArgumentParser(description='Multi-Scale Self-Attention Mixup for Graph Classification')
 parser.add_argument('--seed', type=int, default=777, help='random seed')
 parser.add_argument('--exp_way', type=str, default='k_fold', help='random-split or cross-validation ')
 parser.add_argument('--repetitions', type=int, default=10, help='number of repetitions (default: 10)')
-parser.add_argument('--batch_size', type=int, default=256, help='batch size')
+parser.add_argument('--batch_size', type=int, default=128, help='batch size')
 parser.add_argument('--lr', type=float, default=0.0001, help='learning rate')
 parser.add_argument('--weight_decay', type=float, default=0.001, help='weight decay')
 parser.add_argument('--mixup', type=bool, default=True, help='whether use mixup')
@@ -24,7 +19,7 @@ parser.add_argument('--attention', type=bool, default=True, help='whether use se
 parser.add_argument('--hidden_dim', type=int, default=128, help='hidden size')
 parser.add_argument('--dropout', type=float, default=0.0, help='dropout ratio')
 parser.add_argument('--num_layers', type=int, default=3, help='the numbers of convolution layers')
-parser.add_argument('--dataset', type=str, default='IMDB-MULTI', help='PROTEINS/DD/NCI1/NCI109/Mutagenicity/ENZYMES'
+parser.add_argument('--dataset', type=str, default='PROTEINS', help='PROTEINS/DD/NCI1/NCI109/Mutagenicity/ENZYMES'
                                                                   '/IMDB-MULTI/PTC_FM/COLLAB')
 parser.add_argument('--device', type=str, default='cuda:0', help='specify cuda devices')
 parser.add_argument('--epochs', type=int, default=5000, help='maximum number of epochs')

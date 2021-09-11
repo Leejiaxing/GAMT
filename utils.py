@@ -9,6 +9,7 @@ import os
 from torch_geometric.datasets import TUDataset
 import torch_geometric.transforms as T
 
+
 # function for pre-processing
 @torch.no_grad()
 def scipy_to_torch_sparse(A, device):
@@ -62,17 +63,6 @@ def get_operator(L, DFilters, n, s, J, Lev):
     return d
 
 
-# Compute feature
-def com_feature(dataset):
-    dataset_temp = list()
-    for i in range(len(dataset)):
-        x = degree(dataset[i].edge_index[0], dataset[i].num_nodes).view(-1, 1)
-        data_i = Data(x=x, edge_index=dataset[i].edge_index, y=dataset[i].y)
-        dataset_temp.append(data_i)
-
-    return dataset_temp
-
-
 # initialize dataset
 def dataset_init(dataset, args):
     D1 = lambda x: np.cos(x / 2)
@@ -121,7 +111,7 @@ def dataset_init(dataset, args):
 
 
 def K_Fold(folds, dataset, seed):
-    skf = KFold(folds, shuffle=True, random_state=12345)
+    skf = KFold(folds, shuffle=True, random_state=seed)
     test_indices = []
     for _, index in skf.split(torch.zeros(len(dataset)), dataset.data.y):
         test_indices.append(index)

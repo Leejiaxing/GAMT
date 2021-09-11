@@ -35,8 +35,6 @@ def train_model(args, model, optimizer, train_loader, val_loader, test_loader, i
             data = data.to(args.device)
             out, y_b, lam = model(data, mixup=True, alpha=args.alpha)
             loss = lam * F.nll_loss(out, data.y) + (1 - lam) * F.nll_loss(out, y_b)
-            # out = model(data)
-            # loss = F.nll_loss(out, data.y)
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
